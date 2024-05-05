@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import logo from "./logo.svg";
 import "./App.css";
 import { Amplify } from "aws-amplify";
@@ -11,6 +11,49 @@ import axios from "axios";
 Amplify.configure(awsconfig);
 
 function App() {
+  const Chatbot = ({ showChatbot }) => {
+    useEffect(() => {
+      if (!showChatbot) {
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://cdn.botpress.cloud/webchat/v1/inject.js";
+      script.async = true;
+      document.body.appendChild(script);
+
+      script.onload = () => {
+        window.botpressWebChat.init({
+          botId: "cda40821-3a4d-4e01-a8ae-7d5ae88ca7a2",
+          hostUrl: "https://cdn.botpress.cloud/webchat/v1",
+          messagingUrl: "https://messaging.botpress.cloud",
+          clientId: "cda40821-3a4d-4e01-a8ae-7d5ae88ca7a2",
+        });
+      };
+
+      // 清理函数
+      return () => {
+        if (window.botpressWebChat) {
+          // Hide the chat
+          window.botpressWebChat.sendEvent({ type: "hide" });
+        }
+        document.body.removeChild(script);
+      };
+    }, [showChatbot]); // 依赖 showChatbot 状态变化
+
+    if (!showChatbot) {
+      return null;
+    }
+
+    return <div id="webchat" />;
+  };
+
+  const [showChatbot, setShowChatbot] = useState(false);
+
+  // useEffect to check showChatbot, console.log it
+  useEffect(() => {
+    console.log("showChatbot is:", showChatbot);
+  }, [showChatbot]);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [reportUrl, setReportUrl] = useState("");
@@ -47,27 +90,22 @@ function App() {
         <Authenticator>
           {({ signOut, user }) => (
             <main>
-              <h1>Hello {user.username}</h1>
-              <div className="chat-interface">
-                <div className="messages-list">
-                  {messages.map((msg, index) => (
-                    <div key={index} className={`message ${msg.sender}`}>
-                      {msg.text}
-                    </div>
-                  ))}
-                  
-                </div>
-                <div className="input-area">
-                  <input
-                    type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-                  />
-                  <button onClick={sendMessage}>Send</button>
-                </div>
-              </div>
-              <button onClick={signOut} className="Button">
+              <h1>Hello {user.username} </h1>
+              {/* if user is not null, setshowChatbot to true */}
+              <button onClick={() => setShowChatbot(!showChatbot)}>
+                {showChatbot ? "Hide Chatbot" : "Show Chatbot"}
+              </button>
+
+              {showChatbot && <Chatbot showChatbot={showChatbot} />}
+
+              {/* onClick signout and then setShowChatbot to false */}
+              <button
+                onClick={() => {
+                  setShowChatbot(false);
+                  signOut();
+                }}
+                className="Button"
+              >
                 Sign out
               </button>
             </main>

@@ -122,3 +122,9 @@ h2 {
 .input-area button:hover {
   background-color: #0056b3;
 }
+
+.webchat {
+  display: none;
+  height: 100vh;
+  
+}
