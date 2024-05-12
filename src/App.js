@@ -7,6 +7,7 @@ import awsconfig from "./aws-exports";
 import { Authenticator, Button } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import axios from "axios";
+import { BlobServiceClient, ContainerClient } from "@azure/storage-blob";
 
 Amplify.configure(awsconfig);
 
@@ -57,6 +58,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [reportUrl, setReportUrl] = useState("");
+  const [file, setFile] = useState(null);
 
   const sendMessage = async () => {
     const userMessage = {
@@ -84,6 +86,28 @@ function App() {
     setInputMessage("");
   };
 
+  async function uploadToBlobStorage() {
+    let accountName = "zjservice";
+    let sas =
+      "sv=2022-11-02&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2024-05-12T11:14:49Z&st=2024-05-12T03:14:49Z&spr=https&sig=rnbrkhz%2BAroAQD3M2CynDsH35Z9mS%2FAxIoQtANjcQJs%3D";
+    const blobServiceClient = new BlobServiceClient(
+      `https://${accountName}.blob.core.windows.net?${sas}`
+    );
+    const containerClient = blobServiceClient.getContainerClient("files");
+    await containerClient.createIfNotExists({
+      access: "container",
+    });
+
+    const blobClient = containerClient.getBlockBlobClient(file.name);
+    const options = { blobHTTPHeaders: { blobContentType: file.type } };
+
+    await blobClient.uploadBrowserData(file, options);
+  }
+
+  function handleFileChange(event) {
+    setFile(event.target.files[0]);
+  }
+
   return (
     <div className="App">
       <header className="App-header">
@@ -97,6 +121,9 @@ function App() {
               </button>
 
               {showChatbot && <Chatbot showChatbot={showChatbot} />}
+
+              <input onChange={handleFileChange} type="file" />
+              <button onClick={uploadToBlobStorage}>Upload</button>
 
               {/* onClick signout and then setShowChatbot to false */}
               <button
