@@ -7,11 +7,6 @@ class ChatBox extends Component {
     this.state = { inputMsg: "" };
   }
   generateChats = () => {
-    if (this.chatBox) {
-      setTimeout(() => {
-        this.chatBox.scrollTop = this.chatBox.scrollHeight;
-      }, 2);
-    }
     return this.props.chatLog.map((item) => (
       <div className="chat" key={`chat-${item.name}-${item.timestamp}`}>
         {" "}

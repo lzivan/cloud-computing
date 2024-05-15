@@ -63,7 +63,7 @@ function App() {
   async function uploadToBlobStorage() {
     let accountName = "zjservice";
     let sas =
-      "sv=2022-11-02&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2024-05-15T00:15:06Z&st=2024-05-14T16:15:06Z&spr=https&sig=1MIYOz2a4zJpoG%2BZIOd2AzfCVU81Zv%2B16ukVZemcQhs%3D";
+      "sv=2022-11-02&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2024-05-15T08:16:18Z&st=2024-05-15T00:16:18Z&spr=https&sig=swXvrHwOgOBEoc3IwREo6HrFmAsJwiTZGZfhbzxrzhk%3D";
     const blobServiceClient = new BlobServiceClient(
       `https://${accountName}.blob.core.windows.net?${sas}`
     );
@@ -83,98 +83,102 @@ function App() {
   }
 
   const addChat = (name, message, alert = false) => {
-    setState({
-      chatLog: state.chatLog.concat({
-        name,
-        message: `${message}`,
-        timestamp: `${Date.now()}`,
-        alert,
-      }),
-    });
+    const newChat = {
+      name,
+      message: `${message}`,
+      timestamp: `${Date.now()}`,
+      alert,
+    };
+    const updatedChatLog = state.chatLog.concat(newChat);
+    console.log(updatedChatLog);
+    uploadChatLog(updatedChatLog);
+    setState({ chatLog: updatedChatLog });
   };
 
-  const [localSdp, setLocalSdp] = useState("");
-  const [remoteSdp, setRemoteSdp] = useState("");
-  const [message, setMessage] = useState("");
-  const [receivedMessages, setReceivedMessages] = useState([]);
-  const peerConnection = useRef(null);
-  const dataChannel = useRef(null);
+  const [fileName, setFileName] = useState([]);
+
+  async function uploadChatLog(chatLog) {
+    const accountName = "zjservice";
+    const sas =
+      "sv=2022-11-02&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2024-05-15T08:16:18Z&st=2024-05-15T00:16:18Z&spr=https&sig=swXvrHwOgOBEoc3IwREo6HrFmAsJwiTZGZfhbzxrzhk%3D";
+    const blobServiceClient = new BlobServiceClient(
+      `https://${accountName}.blob.core.windows.net?${sas}`
+    );
+    const containerClient = blobServiceClient.getContainerClient("chatlogs");
+    await containerClient.createIfNotExists({
+      access: "container",
+    });
+
+    const blobName = `chatlog-${new Date().toISOString()}.json`; // 创建一个基于时间的唯一文件名
+    setFileName((fileName) => [...fileName, blobName]);
+    // console.log(fileName.length);
+    const blobClient = containerClient.getBlockBlobClient(blobName);
+    const options = {
+      blobHTTPHeaders: { blobContentType: "application/json" },
+    };
+
+    const chatLogData = JSON.stringify(chatLog);
+    console.log("ChatLogData: ", chatLogData);
+    await blobClient.uploadData(chatLogData, options);
+  }
+
+  async function downloadChatLog() {
+    console.log("FileName Array", fileName);
+
+    if (fileName.length === 0) {
+      return;
+    }
+    const accountName = "zjservice";
+    const sas =
+      "sv=2022-11-02&ss=bfqt&srt=sco&sp=rwdlacupiytfx&se=2024-05-15T08:16:18Z&st=2024-05-15T00:16:18Z&spr=https&sig=swXvrHwOgOBEoc3IwREo6HrFmAsJwiTZGZfhbzxrzhk%3D";
+
+    const blobServiceClient = new BlobServiceClient(
+      `https://${accountName}.blob.core.windows.net?${sas}`
+    );
+    const containerClient = blobServiceClient.getContainerClient("chatlogs");
+
+    // 假设你知道文件名或者通过某种方式获取最新的文件名
+
+    const blobName = fileName[fileName.length - 1];
+    // const blobName = "chatlog-2024-05-15T00:44:53.543Z.json"
+    const blobClient = containerClient.getBlobClient(blobName);
+
+    const downloadBlockBlobResponse = await blobClient.download(0);
+    const downloaded = await blobToString(
+      await downloadBlockBlobResponse.blobBody
+    );
+    console.log("Downloaded Data: ", JSON.parse(downloaded));
+    return JSON.parse(downloaded);
+  }
+
+  async function blobToString(blob) {
+    const fileReader = new FileReader();
+    return new Promise((resolve, reject) => {
+      fileReader.onerror = () => {
+        fileReader.abort();
+        reject(new DOMException("Problem parsing input file."));
+      };
+      fileReader.onload = () => {
+        resolve(fileReader.result);
+      };
+      fileReader.readAsText(blob);
+    });
+  }
+
+  async function processChatLogs() {
+    try {
+      const chatLogs = await downloadChatLog(); // 假设这返回一个聊天记录的数组
+      chatLogs.forEach((chat) => {
+        addChat(chat.name, chat.message, chat.timestamp, chat.alert);
+      });
+    } catch (error) {
+      console.error("Error processing chat logs:", error);
+    }
+  }
 
   useEffect(() => {
-    peerConnection.current = new RTCPeerConnection();
-
-    peerConnection.current.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log("New ICE candidate: ", event.candidate);
-      }
-    };
-
-    peerConnection.current.ondatachannel = (event) => {
-      dataChannel.current = event.channel;
-      dataChannel.current.onopen = () => {
-        console.log("Data channel opened at answer side");
-      };
-      dataChannel.current.onmessage = (event) => {
-        setReceivedMessages((oldMsgs) => [...oldMsgs, event.data]);
-      };
-    };
-
-    peerConnection.current.onconnectionstatechange = () => {
-      console.log(
-        "Connection State Change: ",
-        peerConnection.current.connectionState
-      );
-    };
-
-    return () => {
-      peerConnection.current.close();
-    };
+    processChatLogs();
   }, []);
-
-  const createOffer = async () => {
-    // 在offer方创建数据通道并设置必要的事件监听
-    dataChannel.current = peerConnection.current.createDataChannel("chat");
-    dataChannel.current.onopen = () => {
-      console.log("Data channel is open");
-    };
-    dataChannel.current.onmessage = (event) => {
-      setReceivedMessages((oldMsgs) => [...oldMsgs, event.data]);
-    };
-
-    const offer = await peerConnection.current.createOffer();
-    await peerConnection.current.setLocalDescription(offer);
-    setLocalSdp(offer.sdp);
-  };
-
-  const createAnswer = async () => {
-    await peerConnection.current.setRemoteDescription({
-      type: "offer",
-      sdp: remoteSdp,
-    });
-    const answer = await peerConnection.current.createAnswer();
-    await peerConnection.current.setLocalDescription(answer);
-    setLocalSdp(answer.sdp);
-  };
-
-  const handleSetRemoteDescription = async () => {
-    const desc = {
-      type: localSdp.includes("offer") ? "answer" : "offer",
-      sdp: remoteSdp,
-    };
-    await peerConnection.current.setRemoteDescription(desc);
-  };
-
-  const handleSendMessage = () => {
-    if (dataChannel.current.readyState === "open") {
-      dataChannel.current.send(message);
-      setMessage("");
-    } else {
-      console.log(
-        "Data channel not open. Current state: ",
-        dataChannel.current.readyState
-      );
-    }
-  };
 
   return (
     <div className="App">
@@ -192,34 +196,11 @@ function App() {
 
               <input onChange={handleFileChange} type="file" />
               <button onClick={uploadToBlobStorage}>Upload</button>
-              {/* <ChatBox
-                chatLog={state.chatLog}
-                onSend={(msg) => msg && addChat("Me", msg)}
-              /> */}
-
               <div>
-                <button onClick={createOffer}>Create Offer</button>
-                <button onClick={createAnswer}>Create Answer</button>
-                <textarea value={localSdp} readOnly />
-                <textarea
-                  value={remoteSdp}
-                  onChange={(e) => setRemoteSdp(e.target.value)}
+                <ChatBox
+                  chatLog={state.chatLog}
+                  onSend={(msg) => msg && addChat("Me", msg)}
                 />
-                <button onClick={handleSetRemoteDescription}>
-                  Set Remote Description
-                </button>
-                <input
-                  type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                />
-                <button onClick={handleSendMessage}>Send Message</button>
-                <div>
-                  <h2>Received Messages:</h2>
-                  {receivedMessages.map((msg, index) => (
-                    <p key={index}>{msg}</p>
-                  ))}
-                </div>
               </div>
 
               {/* onClick signout and then setShowChatbot to false */}
