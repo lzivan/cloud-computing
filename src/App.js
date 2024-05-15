@@ -153,6 +153,10 @@ function App() {
 
   async function blobToString(blob) {
     const fileReader = new FileReader();
+    if (!fileReader) {
+      return;
+    }
+
     return new Promise((resolve, reject) => {
       fileReader.onerror = () => {
         fileReader.abort();
